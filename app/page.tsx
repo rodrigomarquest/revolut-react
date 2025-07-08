@@ -58,12 +58,47 @@ const translations: Translations = {
   },
 }
 
+const highRiskKeywords = [
+  "scam",
+  "scammed",
+  "fraud",
+  "fraudulent",
+  "panic",
+  "stolen",
+  "hacked",
+  "hack",
+  "hijacked",
+  "unauthorized",
+  "suspicious",
+  "emergency",
+  "urgent",
+  "help me",
+  "lost money",
+  "missing funds",
+  "can't access",
+  "locked out",
+  "compromised",
+]
+
+const emotionalKeywords = [
+  "worried",
+  "scared",
+  "anxious",
+  "desperate",
+  "confused",
+  "angry",
+  "frustrated",
+  "upset",
+  "stressed",
+  "concerned",
+  "terrified",
+  "devastated",
+]
+
 const keywordResponses: { [key: string]: string } = {
   "i need help": "Of course! We're here to assist you. How can I help? 🤝",
   "my account was scammed": "I'm really sorry to hear that. I'll escalate this to a human agent immediately. 🔒",
 }
-
-const highRiskKeywords = ["scam", "scammed", "fraud", "panic", "stolen", "hacked", "hack", "hijacked"]
 
 export default function RevolutSupportChat() {
   const [messages, setMessages] = useState<Message[]>([])
@@ -73,6 +108,11 @@ export default function RevolutSupportChat() {
   const [isEscalated, setIsEscalated] = useState(false)
   const chatBoxRef = useRef<HTMLDivElement>(null)
   const messageIdRef = useRef(0)
+
+  const [escalationTimer, setEscalationTimer] = useState<NodeJS.Timeout | null>(null)
+  const [escalationCountdown, setEscalationCountdown] = useState(0)
+  const [isHighRiskDetected, setIsHighRiskDetected] = useState(false)
+  const [agentETA, setAgentETA] = useState(5)
 
   useEffect(() => {
     // Initialize with welcome message
@@ -92,6 +132,14 @@ export default function RevolutSupportChat() {
       chatBoxRef.current.scrollTop = chatBoxRef.current.scrollHeight
     }
   }, [messages])
+
+  useEffect(() => {
+    return () => {
+      if (escalationTimer) {
+        clearInterval(escalationTimer)
+      }
+    }
+  }, [escalationTimer])
 
   const addMessage = (sender: string, content: string, isBot = false, isAgent = false) => {
     setMessages((prev) => [
@@ -119,9 +167,12 @@ export default function RevolutSupportChat() {
 
     const lower = text.toLowerCase()
     const isHighRisk = highRiskKeywords.some((kw) => lower.includes(kw))
+    const isEmotional = emotionalKeywords.some((kw) => lower.includes(kw))
 
     if (isHighRisk) {
-      autoEscalate()
+      autoEscalate("high")
+    } else if (isEmotional) {
+      autoEscalate("medium")
     } else {
       normalBotReply(lower)
     }
@@ -135,11 +186,44 @@ export default function RevolutSupportChat() {
     }
   }
 
-  const autoEscalate = () => {
-    addMessage("Bot", "I detect this might be urgent. Escalating to a human agent… ⏳", true)
-    setTimeout(() => {
-      humanAgentJoin()
-    }, 5000)
+  const autoEscalate = (riskLevel: "high" | "medium" = "high") => {
+    setIsHighRiskDetected(true)
+
+    if (riskLevel === "high") {
+      addMessage(
+        "Security Bot",
+        "🚨 HIGH PRIORITY: Security concern detected. Initiating immediate escalation protocol...",
+        true,
+      )
+      setAgentETA(2) // 2 minutes for high risk
+    } else {
+      addMessage("Bot", "I detect this might need special attention. Escalating to a human agent...", true)
+      setAgentETA(5) // 5 minutes for medium risk
+    }
+
+    setEscalationCountdown(agentETA * 60) // Convert to seconds
+
+    // Start countdown timer
+    const timer = setInterval(() => {
+      setEscalationCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer)
+          humanAgentJoin()
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+
+    setEscalationTimer(timer)
+
+    // Show callback options immediately for high risk
+    if (riskLevel === "high") {
+      setTimeout(() => {
+        setShowCallbackOptions(true)
+        addMessage("Security Bot", "Would you like an immediate callback while we prepare your case?", true)
+      }, 2000)
+    }
   }
 
   const manualEscalate = () => {
@@ -150,9 +234,23 @@ export default function RevolutSupportChat() {
   }
 
   const humanAgentJoin = () => {
-    addMessage("Agent Sarah", "Hi Margaret, I'm here to help right away.", false, true)
+    if (escalationTimer) {
+      clearInterval(escalationTimer)
+      setEscalationTimer(null)
+    }
+
+    const agentName = isHighRiskDetected ? "Security Agent Mike" : "Agent Sarah"
+    const message = isHighRiskDetected
+      ? "Hi, I'm Mike from our Security team. I've reviewed your case and I'm here to help immediately. 🔒"
+      : "Hi Margaret, I'm here to help right away."
+
+    addMessage(agentName, message, false, true)
     setIsEscalated(true)
-    setShowCallbackOptions(true)
+    setEscalationCountdown(0)
+
+    if (!showCallbackOptions) {
+      setShowCallbackOptions(true)
+    }
   }
 
   const instantCallback = () => {
@@ -174,6 +272,16 @@ export default function RevolutSupportChat() {
     if (e.key === "Enter") {
       sendMessage()
     }
+  }
+
+  const cancelEscalation = () => {
+    if (escalationTimer) {
+      clearInterval(escalationTimer)
+      setEscalationTimer(null)
+    }
+    setEscalationCountdown(0)
+    setIsHighRiskDetected(false)
+    addMessage("Bot", "Escalation cancelled. How else can I help you?", true)
   }
 
   return (
@@ -228,6 +336,32 @@ export default function RevolutSupportChat() {
               {message.content}
             </div>
           ))}
+
+          {/* Escalation Countdown */}
+          {escalationCountdown > 0 && (
+            <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg animate-in fade-in slide-in-from-bottom-2 duration-500">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-red-700">
+                  <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+                  <strong>
+                    Agent connecting in: {Math.floor(escalationCountdown / 60)}:
+                    {(escalationCountdown % 60).toString().padStart(2, "0")}
+                  </strong>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={cancelEscalation}
+                  className="text-xs bg-white hover:bg-gray-50"
+                >
+                  Cancel
+                </Button>
+              </div>
+              <div className="text-sm text-red-600 mt-1">
+                Priority case #{Math.floor(Math.random() * 10000)} - Security team notified
+              </div>
+            </div>
+          )}
 
           {/* Callback Options */}
           {showCallbackOptions && (
