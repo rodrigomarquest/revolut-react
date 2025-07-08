@@ -180,11 +180,7 @@ export default function RevolutSupportChat() {
     <div className="min-h-screen bg-[#f4f8fb] flex flex-col font-sans">
       {/* Header */}
       <header className="bg-[#002663] text-white p-4 flex items-center gap-3">
-        <img
-          src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/88/Revolut_logo_new.svg/512px-Revolut_logo_new.svg.png"
-          alt="Revolut Logo"
-          className="h-8"
-        />
+        <img src="/revolut-logo.svg" alt="Revolut Logo" className="h-8 w-auto filter brightness-0 invert" />
         <span className="text-xl font-medium">{translations[currentLanguage].header}</span>
       </header>
 
